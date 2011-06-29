@@ -89,7 +89,8 @@ module.exports = {
   'test that not responding to a heartbeat drops client': function (done) {
     var cl = client(++ports)
       , io = create(cl)
-      , messages = 0;
+      , messages = 0
+      , ws;
 
     io.configure(function () {
       io.set('heartbeat interval', .05);
@@ -103,13 +104,14 @@ module.exports = {
         reason.should.eql('heartbeat timeout');
 
         cl.end();
+        ws.finishClose();
         io.server.close();
         done();
       });
     });
 
     cl.handshake(function (sid) {
-      var ws = websocket(cl, sid);
+      ws = websocket(cl, sid);
       ws.on('message', function (packet) {
         if (++messages == 1) {
           packet.type.should.eql('connect');
@@ -125,7 +127,8 @@ module.exports = {
     var cl = client(++ports)
       , io = create(cl)
       , messages = 0
-      , heartbeats = 0;
+      , heartbeats = 0
+      , ws;
 
     io.configure(function () {
       io.set('heartbeat interval', .05);
@@ -139,13 +142,14 @@ module.exports = {
         reason.should.eql('heartbeat timeout');
 
         cl.end();
+        ws.finishClose();
         io.server.close();
         done();
       });
     });
 
     cl.handshake(function (sid) {
-      var ws = websocket(cl, sid);
+      ws = websocket(cl, sid);
       ws.on('message', function (packet) {
         if (++messages == 1) {
           packet.type.should.eql('connect');
@@ -644,16 +648,15 @@ module.exports = {
       connections++;
 
       if (connections != 3) {
-        socket.join('woot', function () {
-          joins++;
+        socket.join('woot');
+        joins++;
 
-          if (joins == 2) {
-            setTimeout(function () {
-              connections.should.eql(3);
-              io.sockets.in('woot').send('hahaha');
-            }, 20);
-          }
-        });
+        if (joins == 2) {
+          setTimeout(function () {
+            connections.should.eql(3);
+            io.sockets.in('woot').send('hahaha');
+          }, 20);
+        }
       }
 
       socket.on('disconnect', function () {
@@ -756,16 +759,15 @@ module.exports = {
       connections++;
 
       if (connections != 3) {
-        socket.join('woot', function () {
-          joins++;
+        socket.join('woot');
+        joins++;
 
-          if (joins == 2) {
-            setTimeout(function () {
-              connections.should.eql(3);
-              io.sockets.in('woot').json.send(123);
-            }, 20);
-          }
-        });
+        if (joins == 2) {
+          setTimeout(function () {
+            connections.should.eql(3);
+            io.sockets.in('woot').json.send(123);
+          }, 20);
+        }
       }
 
       socket.on('disconnect', function () {
@@ -868,16 +870,15 @@ module.exports = {
       connections++;
 
       if (connections != 3) {
-        socket.join('woot', function () {
-          joins++;
+        socket.join('woot');
+        joins++;
 
-          if (joins == 2) {
-            setTimeout(function () {
-              connections.should.eql(3);
-              io.sockets.in('woot').emit('locki');
-            }, 20);
-          }
-        });
+        if (joins == 2) {
+          setTimeout(function () {
+            connections.should.eql(3);
+            io.sockets.in('woot').emit('locki');
+          }, 20);
+        }
       }
 
       socket.on('disconnect', function () {
@@ -1268,8 +1269,9 @@ module.exports = {
     io.sockets.on('connection', function (socket) {
       connections++;
 
-      if (connections == 1)
+      if (connections == 1) {
         socket.join('losers');
+      }
 
       socket.on('trigger broadcast', function () {
         socket.broadcast.to('losers').send('boom');
@@ -1367,8 +1369,9 @@ module.exports = {
     io.sockets.on('connection', function (socket) {
       connections++;
 
-      if (connections == 1)
+      if (connections == 1) {
         socket.join('losers');
+      }
 
       socket.on('trigger broadcast', function () {
         socket.broadcast.json.to('losers').send({ hello: 'world' });
@@ -1546,6 +1549,103 @@ module.exports = {
             });
           });
         });
+      });
+    });
+  },
+
+  'test accessing handshake data from sockets': function (done) {
+    var cl = client(++ports)
+      , io = create(cl)
+      , ws;
+
+    io.sockets.on('connection', function (socket) {
+      socket.handshake.address.address.should.equal('127.0.0.1');
+      socket.handshake.address.port.should.equal(ports);
+      socket.handshake.headers.host.should.equal('localhost');
+      socket.handshake.headers.connection.should.equal('keep-alive');
+      socket.handshake.time.should.match(/GMT/);
+
+      socket.on('disconnect', function () {
+        setTimeout(function () {
+          ws.finishClose();
+          cl.end();
+          io.server.close();
+          done();
+        }, 10);
+      });
+
+      socket.disconnect();
+    });
+
+    cl.handshake(function (sid) {
+      ws = websocket(cl, sid);
+      ws.on('message', function (msg) {
+        if (!ws.connected) {
+          msg.type.should.eql('connect');
+          ws.connected = true;
+        }
+      });
+    });
+  },
+
+  'test accessing the array of clients': function (done) {
+    var port = ++ports
+      , cl1 = client(port)
+      , cl2 = client(port)
+      , io = create(cl1)
+      , total = 2
+      , ws1, ws2;
+
+    io.sockets.on('connection', function (socket) {
+      socket.on('join ferrets', function () {
+        socket.join('ferrets');
+        socket.send('done');
+      });
+    });
+
+    function check() {
+      io.sockets.clients('ferrets').should.have.length(1);
+      io.sockets.clients('ferrets')[0].should.be.an.instanceof(sio.Socket);
+      io.sockets.clients('ferrets')[0].id.should.equal(ws1.sid);
+      io.sockets.clients().should.have.length(2);
+      io.sockets.clients()[0].should.be.an.instanceof(sio.Socket);
+      io.sockets.clients()[0].id.should.equal(ws1.sid);
+      io.sockets.clients()[1].should.be.an.instanceof(sio.Socket);
+      io.sockets.clients()[1].id.should.equal(ws2.sid);
+
+      ws1.finishClose();
+      ws2.finishClose();
+      cl1.end();
+      cl2.end();
+      io.server.close();
+      done();
+    };
+
+    cl1.handshake(function (sid) {
+      ws1 = websocket(cl1, sid);
+      ws1.sid = sid;
+      ws1.on('message', function (msg) {
+        if (!ws1.connected) {
+          msg.type.should.eql('connect');
+          ws1.connected = true;
+          ws1.packet({
+              type: 'event'
+            , name: 'join ferrets'
+            , endpoint: ''
+          });
+        } else {
+          cl2.handshake(function (sid) {
+            ws2 = websocket(cl2, sid);
+            ws2.sid = sid;
+            ws2.on('message', function (msg) {
+              if (!ws2.connected) {
+                msg.type.should.eql('connect');
+                ws2.connected = true;
+                check();
+              }
+            });
+          });
+        }
       });
     });
   }
