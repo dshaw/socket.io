@@ -11,74 +11,8 @@
 
 var sio = require('socket.io')
   , should = require('./common')
-  , HTTPClient = should.HTTPClient
-  , WebSocket = require('../support/node-websocket-client/lib/websocket').WebSocket
   , parser = sio.parser
   , ports = 15400;
-
-/**
- * Exports WSClient.
- */
-
-module.exports = exports = WSClient;
-
-/**
- * WebSocket socket.io client.
- *
- * @api private
- */
-
-function WSClient (port, sid) {
-  this.sid = sid;
-  this.port = port;
-
-  WebSocket.call(
-      this
-    , 'ws://localhost:' + port + '/socket.io/' 
-        + sio.protocol + '/websocket/' + sid
-  );
-};
-
-/**
- * Inherits from WebSocket.
- */
-
-WSClient.prototype.__proto__ = WebSocket.prototype;
-
-/**
- * Overrides message event emission.
- *
- * @api private
- */
-
-WSClient.prototype.emit = function (name) {
-  var args = arguments;
-
-  if (name == 'message' || name == 'data') {
-    args[1] = parser.decodePacket(args[1].toString());
-  }
-
-  return WebSocket.prototype.emit.apply(this, arguments);
-};
-
-/**
- * Writes a packet
- */
-
-WSClient.prototype.packet = function (pack) {
-  this.write(parser.encodePacket(pack));
-  return this;
-};
-
-/**
- * Creates a websocket client.
- *
- * @api public
- */
-
-function websocket (cl, sid) {
-  return new WSClient(cl.port, sid);
-};
 
 /**
  * Tests.
@@ -1559,8 +1493,8 @@ module.exports = {
       , ws;
 
     io.sockets.on('connection', function (socket) {
-      socket.handshake.address.address.should.equal('127.0.0.1');
-      socket.handshake.address.port.should.equal(ports);
+      (!!socket.handshake.address.address).should.be.true;
+      (!!socket.handshake.address.port).should.be.true;
       socket.handshake.headers.host.should.equal('localhost');
       socket.handshake.headers.connection.should.equal('keep-alive');
       socket.handshake.time.should.match(/GMT/);
@@ -1648,6 +1582,65 @@ module.exports = {
         }
       });
     });
-  }
+  },
 
+  'test for intentional and unintentional disconnects': function (done) {
+    var cl = client(++ports)
+      , io = create(cl)
+      , calls = 0
+      , ws;
+
+    function close () {
+      cl.end();
+      io.server.close();
+      ws.finishClose();
+      done();
+    }
+
+    io.configure(function () {
+      io.set('heartbeat interval', .05);
+      io.set('heartbeat timeout', .05);
+      io.set('close timeout', 0);
+    });
+
+    io.of('/foo').on('connection', function (socket) {
+      socket.on('disconnect', function (reason) {
+       reason.should.equal('packet');
+
+       if (++calls == 2) close();
+      });
+    });
+
+    io.of('/bar').on('connection', function (socket) {
+      socket.on('disconnect', function (reason) {
+        reason.should.equal('socket end');
+
+        if (++calls == 2) close();
+      });
+    });
+
+    cl.handshake(function (sid) {
+      var messages = 0;
+      ws = websocket(cl, sid);
+      ws.on('open', function () {
+        ws.packet({
+            type: 'connect'
+          , endpoint: '/foo'
+        });
+        ws.packet({
+            type: 'connect'
+          , endpoint: '/bar'
+        });
+      });
+
+      ws.on('message', function (packet) {
+        if (packet.type == 'connect') {
+          if (++messages === 3) {
+            ws.packet({ type: 'disconnect', endpoint:'/foo' });
+            ws.finishClose();
+          }
+        }
+      });
+    });
+  }
 };
