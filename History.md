@@ -1,4 +1,35 @@
 
+0.8.2 / 2011-08-29
+==================
+
+  * Updated client.
+
+0.8.1 / 2011-08-29
+==================
+
+  * Fixed utf8 bug in send framing in websocket [einaros]
+  * Fixed typo in docs [Znarkus]
+  * Fixed bug in send framing for over 64kB of data in websocket [einaros]
+  * Corrected ping handling in websocket transport [einaros]
+
+0.8.0 / 2011-08-28
+==================
+
+  * Updated to work with two-level websocket versioning. [einaros]
+  * Added hybi07 support. [einaros]
+  * Added hybi10 support. [einaros]
+  * Added http referrer verification to manager.js verifyOrigin. [einaors]
+
+0.7.11 / 2011-08-27
+===================
+
+  * Updated socket.io-client.
+
+0.7.10 / 2011-08-27
+===================
+
+  * Updated socket.io-client.
+
 0.7.9 / 2011-08-12
 ==================
 
