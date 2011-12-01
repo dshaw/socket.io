@@ -117,6 +117,7 @@ module.exports = {
     io.disable('foo');
 
     calls.should.eql(3);
+
     done();
   },
 
@@ -276,6 +277,23 @@ module.exports = {
     });
   },
 
+  'test that a referer with implicit port 80 is accepted for foo.bar.com:80 origin': function (done) {
+    var port = ++ports
+      , io = sio.listen(port)
+      , cl = client(port);
+
+    io.configure(function () {
+      io.set('origins', 'foo.bar.com:80');
+    });
+
+    cl.get('/socket.io/{protocol}', { headers: { referer: 'http://foo.bar.com/something' } }, function (res, data) {
+      res.statusCode.should.eql(200);
+      cl.end();
+      io.server.close();
+      done();
+    });
+  },
+
   'test that erroneous referer is denied for addr:* origin': function (done) {
     var port = ++ports
       , io = sio.listen(port)
@@ -338,7 +356,7 @@ module.exports = {
 
     cl.get('/socket.io/{protocol}/', { headers:headers }, function (res, data) {
       res.statusCode.should.eql(200);
-      res.headers['access-control-allow-origin'].should.eql('*');
+      res.headers['access-control-allow-origin'].should.eql('http://example.org:1337');
       res.headers['access-control-allow-credentials'].should.eql('true');
 
       cl.end();
@@ -426,8 +444,8 @@ module.exports = {
 
   'test disabling heartbeats': function (done) {
     var port = ++ports
-      , io = sio.listen(port)
       , cl = client(port)
+      , io = create(cl)
       , messages = 0
       , beat = false
       , ws;
@@ -446,9 +464,8 @@ module.exports = {
 
       socket.on('disconnect', function (reason) {
         beat.should.be.false;
-
-        cl.end();
         ws.finishClose();
+        cl.end();
         io.server.close();
         done();
       });
@@ -505,8 +522,10 @@ module.exports = {
     io.rooms.foo.length.should.equal(2);
     io.rooms.bar.length.should.equal(2);
 
-    io.server.close();
-    done();
+    process.nextTick(function() {
+      io.server.close();
+      done();
+    });
   },
 
   'test passing options directly to the Manager through listen': function (done) {
@@ -515,8 +534,10 @@ module.exports = {
 
     io.get('resource').should.equal('/my resource');
     io.get('custom').should.equal('opt');
-    io.server.close();
-    done();
+    process.nextTick(function() {
+      io.server.close();
+      done();
+    });
   },
 
   'test disabling the log': function (done) {
@@ -535,8 +556,10 @@ module.exports = {
     console.log = _console;
     calls.should.equal(0);
 
-    io.server.close();
-    done();
+    process.nextTick(function() {
+      io.server.close();
+      done();
+    });
   },
 
   'test disabling logging with colors': function (done) {
@@ -558,7 +581,9 @@ module.exports = {
     console.log = _console;
     calls.should.equal(2);
 
-    io.server.close();
-    done();
+    process.nextTick(function() {
+      io.server.close();
+      done();
+    });
   }
 };
